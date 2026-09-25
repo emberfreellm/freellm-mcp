@@ -1,0 +1,20 @@
+FreeLLMCP Streamable HTTP endpoint listening on http://127.0.0.1:8080/mcp
+Traceback (most recent call last):
+  File "/home/ember/workspace/experiments/mcp/server.py", line 494, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/home/ember/workspace/experiments/mcp/server.py", line 476, in main
+    serve_http(port)
+    ~~~~~~~~~~^^^^^^
+  File "/home/ember/workspace/experiments/mcp/server.py", line 457, in serve_http
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_mcp_http_handler())
+  File "/usr/lib/python3.13/socketserver.py", line 457, in __init__
+    self.server_bind()
+    ~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/http/server.py", line 136, in server_bind
+    socketserver.TCPServer.server_bind(self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.13/socketserver.py", line 478, in server_bind
+    self.socket.bind(self.server_address)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 98] Address already in use

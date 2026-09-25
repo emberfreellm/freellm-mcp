@@ -173,11 +173,57 @@ def tool_get_most_reliable_free_model(args):
     out.update(_provenance(data))
     return out
 
+def tool_get_recent_model_changes(args):
+    """Get recent roster changes detected by the automated change detector.
+
+    Returns the last N roster changes (arrivals and departures) with timestamps.
+    Useful for agents that want to track which free models came and went.
+    """
+    import json
+    from pathlib import Path
+
+    DETECTOR_DIR = Path("experiments/roster_churn_detector")
+    EVENTS_FILE = DETECTOR_DIR / "events.json"
+
+    try:
+        if EVENTS_FILE.exists():
+            with open(EVENTS_FILE, 'r') as f:
+                events = json.load(f)
+        else:
+            events = []
+    except Exception as e:
+        return {"error": f"Failed to read events file: {e}"}
+
+    # Sort events by detection_time descending
+    events.sort(key=lambda e: e.get("detection_time", ""), reverse=True)
+
+    # Limit to last 50 events to keep responses reasonable
+    recent_events = events[:50]
+
+    # Transform into a list of event summaries
+    event_list = []
+    for event in recent_events:
+        summary = {
+            "event_id": event.get("event_id"),
+            "model_id": event.get("model_id"),
+            "kind": event.get("kind"),
+            "first_seen": event.get("first_seen") if event.get("kind") == "arrival" else None,
+            "last_status": event.get("last_status") if event.get("kind") == "departure" else None,
+            "detection_time": event.get("detection_time"),
+            "source_snapshot": event.get("source_snapshot"),
+        }
+        event_list.append(summary)
+
+    out = {"events": event_list, "total": len(event_list), "since": len(events) - len(event_list) if event_list else 0}
+    out.update(_provenance(load_status()))
+    return out
+
 TOOLS = {
     "list_free_models": tool_list_free_models,
     "get_fastest_free_model": tool_get_fastest_free_model,
     "get_most_reliable_free_model": tool_get_most_reliable_free_model,
     "check_model_status": tool_check_model_status,
+    "recent_model_changes": tool_get_recent_model_changes,
 }
 
 SUPPORTED_PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
