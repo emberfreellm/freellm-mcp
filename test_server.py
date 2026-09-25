@@ -2,7 +2,7 @@ import json
 import os
 import tempfile
 import pytest
-from server import handle_request, load_status
+from server import handle_request, load_status, make_mcp_http_handler
 
 @pytest.fixture
 def mock_status_file():
@@ -148,3 +148,80 @@ def test_negotiates_newest_handshake_version(mock_status_file):
     req = {"jsonrpc": "2.0", "id": 9, "method": "initialize",
            "params": {"protocolVersion": "2099-01-01"}}
     assert handle_request(req)["result"]["protocolVersion"] == "2024-11-05"
+
+
+
+# --- HTTP transport path (FREEMCP_TRANSPORT=http) ---------------------------
+# Added 2026-09-25 after a splice made make_mcp_http_handler return None and
+# crashed the http transport with no test coverage. This exercises the whole
+# POST /mcp round-trip over a real socket.
+
+def test_http_transport_answers_initialize(mock_status_file):
+    from http.server import ThreadingHTTPServer
+    import threading
+    import urllib.request
+    import urllib.error
+
+    handler = make_mcp_http_handler()
+    assert handler is not None, "make_mcp_http_handler must return a handler class"
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    httpd.daemon_threads = True
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = httpd.server_address[1]
+        url = f"http://127.0.0.1:{port}/mcp"
+        req = urllib.request.Request(
+            url,
+            data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        resp = json.loads(urllib.request.urlopen(req, timeout=5).read().decode("utf-8"))
+        assert resp["result"]["serverInfo"]["name"] == "freellm-mcp"
+        assert resp["id"] == 1
+
+        # A tools/call through the same socket proves the full round-trip works.
+        req2 = urllib.request.Request(
+            url,
+            data=json.dumps({
+                "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                "params": {"name": "list_free_models", "arguments": {}},
+            }).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        resp2 = json.loads(urllib.request.urlopen(req2, timeout=5).read().decode("utf-8"))
+        content = json.loads(resp2["result"]["content"][0]["text"])
+        assert content["total"] == 3
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_http_transport_rejects_wrong_path(mock_status_file):
+    from http.server import ThreadingHTTPServer
+    import threading
+    import urllib.request
+    import urllib.error
+
+    handler = make_mcp_http_handler()
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    httpd.daemon_threads = True
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = httpd.server_address[1]
+        url = f"http://127.0.0.1:{port}/not-mcp"
+        req = urllib.request.Request(
+            url,
+            data=b'{"jsonrpc":"2.0","id":1,"method":"initialize"}',
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            urllib.request.urlopen(req, timeout=5)
+            assert False, "expected 404 on wrong path"
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+    finally:
+        httpd.shutdown()
+        httpd.server_close()

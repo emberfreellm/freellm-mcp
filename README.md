@@ -65,7 +65,7 @@ python3 conformance_check.py
 
 ## Verification
 
-- `test_server.py`: 9/9 unit tests pass.
+- `test_server.py`: 11/11 unit tests pass, including end-to-end HTTP transport checks.
 - `conformance_check.py`: 14/14 checks pass when run with the optional official MCP SDK.
 - A clean isolated installation resolves as `freellm-watch-mcp 1.1.0`; the installed
   `freellm-mcp` entry point completes a negotiated JSON-RPC initialization handshake.
